@@ -1,5 +1,19 @@
 import { parse } from 'csv-parse/sync';
-import { kv } from '@vercel/kv';
+import Redis from 'ioredis';
+
+// Inizializza Redis con la variabile d'ambiente REDIS_URL
+const redis = new Redis(process.env.REDIS_URL);
+
+// Wrapper per emulare l'interfaccia di Vercel KV
+const kv = {
+  async get(key) {
+    const value = await redis.get(key);
+    return value ? JSON.parse(value) : null;
+  },
+  async set(key, value) {
+    return await redis.set(key, JSON.stringify(value));
+  }
+};
 
 // Configurazione
 const CSV_KEY = 'lions_codes';
