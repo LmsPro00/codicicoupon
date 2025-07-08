@@ -1,0 +1,24 @@
+{
+  "name": "lions-2025-icmd12",
+  "version": "1.0.0",
+  "description": "Estrazione codici casuali per Zapier",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "init-kv": "node -r dotenv/config scripts/init-kv-storage.js"
+  },
+  "dependencies": {
+    "@vercel/kv": "^0.2.4",
+    "next": "^14.1.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "csv-parse": "^5.5.3",
+    "csv-stringify": "^6.4.5",
+    "dotenv": "^16.3.1",
+    "node-fetch": "^3.3.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
