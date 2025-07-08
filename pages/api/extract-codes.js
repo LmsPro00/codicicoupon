@@ -38,8 +38,8 @@ async function initializeCodesFromCSV(csvContent) {
 
 export default async function handler(req, res) {
   try {
-    // Accetta solo richieste POST
-    if (req.method !== 'POST') {
+    // Accetta richieste GET e POST
+    if (req.method !== 'POST' && req.method !== 'GET') {
       return res.status(405).json({ error: 'Metodo non consentito' });
     }
 
@@ -81,22 +81,28 @@ export default async function handler(req, res) {
     const remainingCodes = allCodes.filter(code => !selected.includes(code));
     await kv.set(CSV_KEY, remainingCodes);
     
-    // Invia a Zapier se l'URL è configurato
-    if (ZAPIER_URL) {
+    // Invia a Zapier se l'URL è configurato E se la richiesta è POST
+    // Per le richieste GET, non inviamo i dati a Zapier (li restituiamo solo come risposta)
+    if (ZAPIER_URL && req.method === 'POST' && req.body.sendToZapier !== false) {
       console.log('Invio a Zapier...');
-      const response = await fetch(ZAPIER_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          extracted_codes: selected, 
-          timestamp: new Date().toISOString() 
-        })
-      });
-      
-      if (!response.ok) {
-        console.error(`Errore nell'invio a Zapier: ${response.statusText}`);
-      } else {
-        console.log('Codici inviati con successo a Zapier');
+      try {
+        const response = await fetch(ZAPIER_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            extracted_codes: selected, 
+            timestamp: new Date().toISOString() 
+          })
+        });
+        
+        if (!response.ok) {
+          console.error(`Errore nell'invio a Zapier: ${response.statusText}`);
+        } else {
+          console.log('Codici inviati con successo a Zapier');
+        }
+      } catch (zapierError) {
+        console.error('Errore durante l\'invio a Zapier:', zapierError);
+        // Non blocchiamo l'esecuzione in caso di errore con Zapier
       }
     } else {
       // Non segnaliamo errore se ZAPIER_URL non è configurato,
