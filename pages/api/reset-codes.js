@@ -36,13 +36,34 @@ async function initializeKVFromCSV(csvContent) {
     });
 
     // Estrai i codici dal CSV (presumendo che i codici siano nella prima colonna)
-    const codes = records.map(record => record[0]).filter(code => code && code.trim() !== '');
+    const codes = [];
+    records.forEach(record => {
+      // Se la riga contiene una stringa singola (header del CSV)
+      if (typeof record === 'string') {
+        const rowCodes = record.split(',').map(c => c.trim()).filter(c => c !== '');
+        codes.push(...rowCodes);
+      }
+      // Se la riga è un array (formato standard CSV)
+      else if (Array.isArray(record)) {
+        record.forEach(cell => {
+          if (cell && typeof cell === 'string') {
+            const cellCodes = cell.split(',').map(c => c.trim()).filter(c => c !== '');
+            codes.push(...cellCodes);
+          }
+        });
+      }
+    });
     
-    // Salva i codici nel database KV
-    await kv.del('codes');
-    await kv.sadd('codes', ...codes);
+    // Rimuovi eventuali duplicati
+    const uniqueCodes = [...new Set(codes)];
     
-    const totalCodes = await kv.scard('codes');
+    // Usa la stessa chiave 'lions_codes' come in extract-codes.js
+    const CSV_KEY = 'lions_codes';
+    
+    // Salva i codici nel database KV come array JSON
+    await kv.set(CSV_KEY, uniqueCodes);
+    
+    const totalCodes = uniqueCodes.length;
     
     return {
       success: true,
