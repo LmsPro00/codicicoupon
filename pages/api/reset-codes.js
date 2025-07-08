@@ -67,7 +67,7 @@ async function initializeKVFromCSV(csvContent) {
     
     return {
       success: true,
-      message: `Database KV inizializzato con successo. Totale codici: ${totalCodes}`,
+      message: `CODICI REIMPOSTATI: ${totalCodes} CODICI CARICATI CON SUCCESSO`,
       totalCodes
     };
   } catch (error) {
