@@ -1,24 +1,16 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { parse } = require('csv-parse/sync');
-const { createClient } = require('@vercel/kv');
 
-// Verifica se sono presenti le variabili d'ambiente necessarie
-if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
-  console.error('❌ Errore: variabili d\'ambiente KV_REST_API_URL e KV_REST_API_TOKEN mancanti');
-  console.log('ℹ️  Crea un database KV su Vercel e configura le variabili nel file .env');
-  process.exit(1);
-}
+// Importa il nostro storage adapter
+const { createStorageClient } = require('../utils/storage-adapter');
 
 // Configurazione
 const CSV_PATH = process.argv[2] || path.join(process.cwd(), 'data', 'codici.csv');
 const CSV_KEY = 'lions_codes';
 
-// Inizializza il client KV
-const kv = createClient({
-  url: process.env.KV_REST_API_URL,
-  token: process.env.KV_REST_API_TOKEN,
-});
+// Inizializza il client di storage (Redis o in-memory fallback)
+const kv = createStorageClient();
 
 async function initializeCodesFromFile() {
   try {

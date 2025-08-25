@@ -1,30 +1,10 @@
 import { parse } from 'csv-parse/sync';
-import Redis from 'ioredis';
 import fs from 'fs';
 import path from 'path';
+import { createStorageClient } from '../../utils/storage-adapter';
 
-// Inizializza Redis con la variabile d'ambiente REDIS_URL
-const redis = new Redis(process.env.REDIS_URL);
-
-// Wrapper per emulare l'interfaccia di Vercel KV
-const kv = {
-  async get(key) {
-    const value = await redis.get(key);
-    return value ? JSON.parse(value) : null;
-  },
-  async set(key, value) {
-    return await redis.set(key, JSON.stringify(value));
-  },
-  async del(key) {
-    return await redis.del(key);
-  },
-  async sadd(key, ...members) {
-    return await redis.sadd(key, ...members);
-  },
-  async scard(key) {
-    return await redis.scard(key);
-  }
-};
+// Inizializza il client di storage (Redis o in-memory fallback)
+const kv = createStorageClient();
 
 // Funzione per leggere il file CSV e inizializzare il database KV
 async function initializeKVFromCSV(csvContent) {

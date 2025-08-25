@@ -94,3 +94,33 @@ Nel tuo flusso Zapier:
 - I codici sono memorizzati in un database KV su Vercel e vengono estratti in modo casuale
 - Una volta estratti, i codici vengono rimossi dal database e non saranno più disponibili
 - Quando i codici si esauriscono, l'API restituirà un array vuoto e un messaggio
+
+## Sviluppo Locale
+
+### Storage Adapter
+
+L'applicazione utilizza un sistema di storage flessibile che supporta:
+
+1. **Vercel KV** - In produzione, quando sono configurate le variabili `KV_REST_API_URL` e `KV_REST_API_TOKEN`
+2. **Redis** - Quando è configurata la variabile `REDIS_URL`
+3. **In-memory Storage** - Fallback automatico per sviluppo locale quando Redis non è disponibile
+
+Questo permette di sviluppare e testare l'applicazione localmente senza dover installare Redis.
+
+### Configurazione per Sviluppo
+
+1. Crea un file `.env` con le seguenti variabili:
+   ```
+   # URL del webhook Zapier (opzionale per sviluppo)
+   ZAPIER_WEBHOOK_URL=https://hooks.zapier.com/hooks/catch/your-webhook-id-here
+   
+   # Numero di codici da estrarre (default: 15)
+   NUM_EXTRACT=15
+   ```
+
+2. Avvia il server di sviluppo:
+   ```
+   npm run dev
+   ```
+
+3. L'applicazione utilizzerà automaticamente lo storage in-memory per lo sviluppo locale

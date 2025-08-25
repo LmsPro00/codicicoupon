@@ -1,19 +1,8 @@
 import { parse } from 'csv-parse/sync';
-import Redis from 'ioredis';
+import { createStorageClient } from '../../utils/storage-adapter';
 
-// Inizializza Redis con la variabile d'ambiente REDIS_URL
-const redis = new Redis(process.env.REDIS_URL);
-
-// Wrapper per emulare l'interfaccia di Vercel KV
-const kv = {
-  async get(key) {
-    const value = await redis.get(key);
-    return value ? JSON.parse(value) : null;
-  },
-  async set(key, value) {
-    return await redis.set(key, JSON.stringify(value));
-  }
-};
+// Inizializza il client di storage (Redis o in-memory fallback)
+const kv = createStorageClient();
 
 // Configurazione
 const CSV_KEY = 'lions_codes';
@@ -100,22 +89,42 @@ export default async function handler(req, res) {
     if (ZAPIER_URL && req.method === 'POST' && req.body.sendToZapier !== false) {
       console.log('Invio a Zapier...');
       try {
+        // Implementazione con timeout per evitare attese troppo lunghe
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 secondi di timeout
+        
         const response = await fetch(ZAPIER_URL, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'X-Request-Source': 'lions-2025-app'
+          },
           body: JSON.stringify({ 
             extracted_codes: selected, 
-            timestamp: new Date().toISOString() 
-          })
+            timestamp: new Date().toISOString(),
+            remaining_count: remainingCodes.length
+          }),
+          signal: controller.signal
         });
         
+        clearTimeout(timeoutId); // Pulisce il timeout se la richiesta è completata
+        
         if (!response.ok) {
-          console.error(`Errore nell'invio a Zapier: ${response.statusText}`);
+          console.error(`Errore nell'invio a Zapier: ${response.status} ${response.statusText}`);
+          // Log della risposta per debug
+          try {
+            const errorText = await response.text();
+            console.error('Dettagli errore Zapier:', errorText);
+          } catch (e) {}
         } else {
           console.log('Codici inviati con successo a Zapier');
         }
       } catch (zapierError) {
-        console.error('Errore durante l\'invio a Zapier:', zapierError);
+        if (zapierError.name === 'AbortError') {
+          console.error('Timeout durante la connessione a Zapier (5s)');
+        } else {
+          console.error('Errore durante l\'invio a Zapier:', zapierError.message);
+        }
         // Non blocchiamo l'esecuzione in caso di errore con Zapier
       }
     } else {
