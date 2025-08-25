@@ -1,9 +1,20 @@
 [build]
   command = "npm run build"
   publish = ".next"
+  functions = "netlify/functions"
 
 [build.environment]
   NODE_VERSION = "18"
+
+[[redirects]]
+  from = "/api/extract-codes"
+  to = "/.netlify/functions/extract-codes"
+  status = 200
+
+[[redirects]]
+  from = "/api/reset-codes"
+  to = "/.netlify/functions/reset-codes"
+  status = 200
 
 [[redirects]]
   from = "/*"
