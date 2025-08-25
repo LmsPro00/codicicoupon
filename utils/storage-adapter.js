@@ -7,99 +7,103 @@
 const inMemoryStorage = new Map();
 
 /**
- * Crea un client di storage che tenta di usare Redis se disponibile,
- * altrimenti usa un semplice storage in-memory
+ * Crea un client di storage con fallback automatico robusto
  */
 export function createStorageClient() {
-  // Verifica se è configurato Redis
-  const hasRedisConfig = process.env.REDIS_URL || 
-    (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
-  
-  // Se non c'è configurazione Redis, usa lo storage in-memory
-  if (!hasRedisConfig) {
-    console.log('⚠️ Redis non configurato. Utilizzo storage in-memory (solo per sviluppo)');
-    return createInMemoryClient();
-  }
-  
-  // Altrimenti tenta di usare Redis
-  try {
-    // Se è configurato Vercel KV
-    if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
+  // Se è configurato Vercel KV, prova quello per primo
+  if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
+    try {
       const { createClient } = require('@vercel/kv');
       console.log('🔄 Connessione a Vercel KV...');
-      
       return createClient({
         url: process.env.KV_REST_API_URL,
         token: process.env.KV_REST_API_TOKEN,
       });
+    } catch (err) {
+      console.error('❌ Errore Vercel KV:', err.message);
     }
-    
-    // Se è configurato Redis diretto
-    if (process.env.REDIS_URL) {
+  }
+  
+  // Se è configurato Redis, prova con fallback automatico
+  if (process.env.REDIS_URL) {
+    try {
       const Redis = require('ioredis');
-      console.log('🔄 Connessione a Redis...');
+      console.log('🔄 Connessione a Redis con fallback automatico...');
       
       const redis = new Redis(process.env.REDIS_URL, {
-        maxRetriesPerRequest: 1,
-        connectTimeout: 5000,
+        maxRetriesPerRequest: 0, // Disabilita retry automatici
+        connectTimeout: 3000,
         lazyConnect: true,
-        retryStrategy: (times) => {
-          if (times > 2) return null;
-          return Math.min(times * 100, 500);
-        }
+        enableOfflineQueue: false,
+        retryStrategy: () => null // Non ritentare connessioni
       });
       
-      // Gestione errori Redis per evitare crash
+      let isRedisWorking = true;
+      
       redis.on('error', (err) => {
-        console.error('❌ Errore Redis:', err.message);
-        // Non fare nulla, lascia che il fallback gestisca
+        console.error('❌ Redis error, switching to in-memory:', err.message);
+        isRedisWorking = false;
       });
       
-      // Wrapper per uniformare l'interfaccia con Vercel KV
+      redis.on('close', () => {
+        console.log('⚠️ Redis connection closed, using in-memory');
+        isRedisWorking = false;
+      });
+      
+      // Wrapper con fallback automatico
+      const fallbackClient = createInMemoryClient();
+      
       return {
         async get(key) {
+          if (!isRedisWorking) return fallbackClient.get(key);
           try {
             const value = await redis.get(key);
             return value ? JSON.parse(value) : null;
           } catch (err) {
-            console.error('❌ Errore Redis get:', err.message);
-            throw err;
+            console.log('⚠️ Redis get failed, using in-memory');
+            isRedisWorking = false;
+            return fallbackClient.get(key);
           }
         },
         async set(key, value) {
+          if (!isRedisWorking) return fallbackClient.set(key, value);
           try {
             return await redis.set(key, JSON.stringify(value));
           } catch (err) {
-            console.error('❌ Errore Redis set:', err.message);
-            throw err;
+            console.log('⚠️ Redis set failed, using in-memory');
+            isRedisWorking = false;
+            return fallbackClient.set(key, value);
           }
         },
         async del(key) {
+          if (!isRedisWorking) return fallbackClient.del(key);
           try {
             return await redis.del(key);
           } catch (err) {
-            console.error('❌ Errore Redis del:', err.message);
-            throw err;
+            console.log('⚠️ Redis del failed, using in-memory');
+            isRedisWorking = false;
+            return fallbackClient.del(key);
           }
         },
         async acquireLock(lockKey, ttlMs = 8000) {
+          if (!isRedisWorking) return fallbackClient.acquireLock(lockKey, ttlMs);
           try {
             const ok = await redis.set(lockKey, '1', 'PX', ttlMs, 'NX');
             return ok === 'OK';
           } catch (err) {
-            console.error('❌ Errore Redis acquireLock:', err.message);
-            throw err;
+            console.log('⚠️ Redis acquireLock failed, using in-memory');
+            isRedisWorking = false;
+            return fallbackClient.acquireLock(lockKey, ttlMs);
           }
         }
       };
+    } catch (err) {
+      console.error('❌ Errore inizializzazione Redis:', err.message);
     }
-  } catch (err) {
-    console.error('❌ Errore connessione Redis:', err.message);
-    console.log('⚠️ Fallback a storage in-memory (solo per sviluppo)');
-    return createInMemoryClient();
   }
   
-  // Fallback a in-memory se qualcosa va storto
+  // Fallback finale a in-memory
+  console.log('🔄 Utilizzo storage in-memory');
   return createInMemoryClient();
 }
 
