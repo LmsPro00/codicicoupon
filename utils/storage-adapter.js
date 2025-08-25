@@ -41,23 +41,55 @@ export function createStorageClient() {
       
       const redis = new Redis(process.env.REDIS_URL, {
         maxRetriesPerRequest: 1,
+        connectTimeout: 5000,
+        lazyConnect: true,
         retryStrategy: (times) => {
-          if (times > 3) return null;
-          return Math.min(times * 100, 1000);
+          if (times > 2) return null;
+          return Math.min(times * 100, 500);
         }
+      });
+      
+      // Gestione errori Redis per evitare crash
+      redis.on('error', (err) => {
+        console.error('❌ Errore Redis:', err.message);
+        // Non fare nulla, lascia che il fallback gestisca
       });
       
       // Wrapper per uniformare l'interfaccia con Vercel KV
       return {
         async get(key) {
-          const value = await redis.get(key);
-          return value ? JSON.parse(value) : null;
+          try {
+            const value = await redis.get(key);
+            return value ? JSON.parse(value) : null;
+          } catch (err) {
+            console.error('❌ Errore Redis get:', err.message);
+            throw err;
+          }
         },
         async set(key, value) {
-          return await redis.set(key, JSON.stringify(value));
+          try {
+            return await redis.set(key, JSON.stringify(value));
+          } catch (err) {
+            console.error('❌ Errore Redis set:', err.message);
+            throw err;
+          }
         },
         async del(key) {
-          return await redis.del(key);
+          try {
+            return await redis.del(key);
+          } catch (err) {
+            console.error('❌ Errore Redis del:', err.message);
+            throw err;
+          }
+        },
+        async acquireLock(lockKey, ttlMs = 8000) {
+          try {
+            const ok = await redis.set(lockKey, '1', 'PX', ttlMs, 'NX');
+            return ok === 'OK';
+          } catch (err) {
+            console.error('❌ Errore Redis acquireLock:', err.message);
+            throw err;
+          }
         }
       };
     }
@@ -86,6 +118,12 @@ function createInMemoryClient() {
     async del(key) {
       inMemoryStorage.delete(key);
       return 1;
+    },
+    async acquireLock(lockKey, ttlMs = 8000) {
+      if (inMemoryStorage.has(lockKey)) return false;
+      inMemoryStorage.set(lockKey, Date.now() + ttlMs);
+      setTimeout(() => inMemoryStorage.delete(lockKey), ttlMs);
+      return true;
     }
   };
 }
